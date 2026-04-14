@@ -1,0 +1,150 @@
+template<typename T, typename F>
+struct PersistentSegmentTree {
+    struct Node {
+        T val;
+        int l, r; // 子ノードのインデックス
+    };
+
+    int n;
+    std::vector<Node> nodes;
+    T syoki;
+    F f;
+
+    // コンストラクタ：N以上の最小の2冪を計算
+    PersistentSegmentTree(int _n, F _f, T sy) : f(_f), syoki(sy) {
+        n = 1;
+        while (n < _n) n <<= 1;
+        nodes.reserve(n * 2 + 100000 * (__builtin_ctz(n) + 2));
+    }
+
+    // 初期ツリーを構築し、そのルートのインデックスを返す
+    int build() {
+        return build_rec(0, n);
+    }
+
+    // k番目の要素をxに更新し、新しいルートのインデックスを返す
+    int update(int root, int k, T x) {
+        return update_rec(root, 0, n, k, x);
+    }
+
+    // 区間 [a, b) の結果を取得する
+    T query(int root, int a, int b) {
+        return query_rec(root, 0, n, a, b);
+    }
+
+    // k番目の要素を取得する
+    T get(int root, int k) {
+        return query(root, k, k + 1);
+    }
+
+    // k番目の要素にxを作用させ、新しいルートのインデックスを返す
+    int add(int root, int k, T x) {
+        return update(root, k, f(get(root, k), x));
+    }
+
+    // max_right
+    template <typename C>
+    int max_right(int root, int l, C check) {
+        if (l >= n) return n;
+        T sm = syoki;
+        return max_right_rec(root, 0, n, l, check, sm);
+    }
+
+    // min_left
+    template <typename C>
+    int min_left(int root, int r, C check) {
+        if (r <= 0) return 0;
+        T sm = syoki;
+        return min_left_rec(root, 0, n, r, check, sm);
+    }
+
+private:
+    int build_rec(int l, int r) {
+        if (l + 1 == r) {
+            nodes.push_back({syoki, -1, -1});
+            return nodes.size() - 1;
+        }
+        int m = (l + r) / 2;
+        int l_ch = build_rec(l, m);
+        int r_ch = build_rec(m, r);
+        nodes.push_back({f(nodes[l_ch].val, nodes[r_ch].val), l_ch, r_ch});
+        return nodes.size() - 1;
+    }
+
+    int update_rec(int idx, int l, int r, int k, T x) {
+        if (l + 1 == r) {
+            nodes.push_back({x, -1, -1});
+            return nodes.size() - 1;
+        }
+        int m = (l + r) / 2;
+        Node cur = nodes[idx]; // 現在のノードをコピー
+        
+        if (k < m) {
+            cur.l = update_rec(cur.l, l, m, k, x);
+        } else {
+            cur.r = update_rec(cur.r, m, r, k, x);
+        }
+        
+        cur.val = f(nodes[cur.l].val, nodes[cur.r].val);
+        nodes.push_back(cur);
+        return nodes.size() - 1;
+    }
+
+    T query_rec(int idx, int l, int r, int a, int b) {
+        if (b <= l || r <= a) return syoki;
+        if (a <= l && r <= b) return nodes[idx].val;
+        int m = (l + r) / 2;
+        T vl = query_rec(nodes[idx].l, l, m, a, b);
+        T vr = query_rec(nodes[idx].r, m, r, a, b);
+        return f(vl, vr);
+    }
+
+    template <typename C>
+    int max_right_rec(int idx, int L, int R, int l, C check, T& sm) {
+        if (R <= l) return l;
+        if (l <= L) {
+            T nxt_sm = f(sm, nodes[idx].val);
+            if (check(nxt_sm)) {
+                sm = nxt_sm;
+                return R;
+            }
+            if (L + 1 == R) return L; // 葉まで降りて条件を満たさなかった
+        }
+        int M = (L + R) / 2;
+        int res = max_right_rec(nodes[idx].l, L, M, l, check, sm);
+        if (res < M) return res; // 左の子で止まった場合
+        return max_right_rec(nodes[idx].r, M, R, l, check, sm);
+    }
+
+    template <typename C>
+    int min_left_rec(int idx, int L, int R, int r, C check, T& sm) {
+        if (r <= L) return r;
+        if (R <= r) {
+            T nxt_sm = f(nodes[idx].val, sm);
+            if (check(nxt_sm)) {
+                sm = nxt_sm;
+                return L;
+            }
+            if (L + 1 == R) return R; // 葉まで降りて条件を満たさなかった
+        }
+        int M = (L + R) / 2;
+        int res = min_left_rec(nodes[idx].r, M, R, r, check, sm);
+        if (res > M) return res; // 右の子で止まった場合
+        return min_left_rec(nodes[idx].l, L, M, r, check, sm);
+    }
+};
+/*
+ーーー宣言ーーー
+auto op = [](int a, int b) { return std::max(a, b); };
+PersistentSegmentTree<int, decltype(op)> seg(10, op, 0);
+
+std::vector<int> roots; // 各バージョンのルートを保存する配列
+roots.push_back(seg.build()); // バージョン0 (初期状態)
+
+ーーー更新ーーー
+int new_root = seg.update(roots[0], 3, 15);
+roots.push_back(new_root); // バージョン1
+
+ーーー取得ーーー
+int ans1 = seg.query(roots[0], 0, 5);
+*/
