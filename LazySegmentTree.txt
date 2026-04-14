@@ -1,0 +1,114 @@
+/* * 万能遅延セグメント木 (0-indexed, 半開区間 [l, r))
+ * S: データの型 
+ * F: 作用素(遅延)の型
+
+    1.サイズN
+    2.合体関数(Min,Max,Sumなど)      op
+    3.初期値を返す関数               e
+    4.遅延を反映させる関数           mapping
+    5.古い遅延と新しい遅延の処理関数 comp
+    6.何もしない関数                 id
+ */
+template<typename S, typename F>
+struct LazySegmentTree {
+    using Op = function<S(S, S)>;
+    using E = function<S()>;
+    using Mapping = function<S(F, S)>;
+    using Composition = function<F(F, F)>;
+    using Id = function<F()>;
+
+    int n;
+    vector<S> d;
+    vector<F> lz;
+    Op op;              // データ同士の合成 (max, sumなど)
+    E e;                // データの単位元
+    Mapping mapping;    // 遅延をデータに反映
+    Composition composition; // 遅延同士の合成
+    Id id;              // 遅延の単位元
+
+    LazySegmentTree(int _n, Op _op, E _e, Mapping _mapping, Composition _composition, Id _id)
+        : op(_op), e(_e), mapping(_mapping), composition(_composition), id(_id) {
+        n = 1;
+        while (n < _n) n *= 2;
+        d.assign(2 * n, e());
+        lz.assign(2 * n, id());
+    }
+
+    // 初期化 (配列で構築)
+    void build(const vector<S>& v) {
+        for (int i = 0; i < (int)v.size(); i++) d[n + i] = v[i];
+        for (int i = n - 1; i >= 1; i--) d[i] = op(d[2 * i], d[2 * i + 1]);
+    }
+
+    // 遅延評価の伝播
+    void push(int k) {
+        if (lz[k] == id()) return;
+        int l = 2 * k, r = 2 * k + 1;
+        d[l] = mapping(lz[k], d[l]);
+        lz[l] = composition(lz[k], lz[l]);
+        d[r] = mapping(lz[k], d[r]);
+        lz[r] = composition(lz[k], lz[r]);
+        lz[k] = id();
+    }
+
+    /// 修正案
+    void set(int p, S x) {
+        p += n;
+        for (int i = 31 - __builtin_clz(n); i >= 1; i--) {
+            push(p >> i);
+        }
+        
+        d[p] = x;
+        // for (int i = 1; i <= n; i <<= 1) { // ここのループ条件も i <= n だと少し変かも？
+        //     // 普通はこう書きます
+        //     // p >>= 1; update_node(p); ...
+        // }
+        for (int k = p >> 1; k >= 1; k >>= 1) {
+            d[k] = op(d[2 * k], d[2 * k + 1]);
+        }
+    }
+
+    // 区間更新 [l, r) に f を適用
+    void update(int l, int r, F f, int k, int a, int b) {
+        if (l <= a && b <= r) {
+            d[k] = mapping(f, d[k]);
+            lz[k] = composition(f, lz[k]);
+        } else {
+            push(k);
+            int mid = (a + b) / 2;
+            if (l < mid) update(l, r, f, 2 * k, a, mid);
+            if (r > mid) update(l, r, f, 2 * k + 1, mid, b);
+            d[k] = op(d[2 * k], d[2 * k + 1]);
+        }
+    }
+    void update(int l, int r, F f) { update(l, r, f, 1, 0, n); }
+
+    // 区間取得 [l, r)
+    S query(int l, int r, int k, int a, int b) {
+        if (b <= l || r <= a) return e();
+        if (l <= a && b <= r) return d[k];
+        push(k);
+        int mid = (a + b) / 2;
+        return op(query(l, r, 2 * k, a, mid), query(l, r, 2 * k + 1, mid, b));
+    }
+    S query(int l, int r) { return query(l, r, 1, 0, n); }
+};
+
+/* * 万能遅延セグメント木 (0-indexed, 半開区間 [l, r))
+* S: データの型 
+* F: 作用素(遅延)の型
+struct S {ll x = 0, size = 0;};
+struct F {
+    ll a = 1, b = 0;
+    
+    bool operator==(const F& other) const {
+        return a == other.a && b == other.b;
+    }
+};
+
+auto op = []( S l, S r) -> S{};// 合体関数(Min,Max,Sumなど) 返値:S
+auto e = []() -> S{};// 初期値 返値:S
+auto mapping = []( F f, S x) -> S{};// 遅延を反映 返値:S
+auto comp = []( F nw, F od) -> F{};// 新旧遅延を合成 返値:F
+auto id = []() -> F{};// 遅延の初期値 返値:F
+ */
