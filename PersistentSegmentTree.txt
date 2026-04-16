@@ -58,6 +58,11 @@ struct PersistentSegmentTree {
         return min_left_rec(root, 0, n, r, check, sm);
     }
 
+    // root_dest（書き換え先）の区間 [a, b) を、root_src（コピー元）の内容で置き換える
+    int copy_range(int root_dest, int root_src, int a, int b) {
+        return copy_range_rec(root_dest, root_src, 0, n, a, b);
+    }
+
 private:
     int build_rec(int l, int r) {
         if (l + 1 == r) {
@@ -131,6 +136,20 @@ private:
         int res = min_left_rec(nodes[idx].r, M, R, r, check, sm);
         if (res > M) return res; // 右の子で止まった場合
         return min_left_rec(nodes[idx].l, L, M, r, check, sm);
+    }
+
+    int copy_range_rec(int idx_dest, int idx_src, int l, int r, int a, int b) {
+        if (b <= l || r <= a) return idx_dest; // 範囲外なら今のノードをそのまま返す
+        if (a <= l && r <= b) return idx_src;  // 完全に含まれるなら、コピー元のノードをそのまま繋ぐ
+
+        int m = (l + r) / 2;
+        Node cur = nodes[idx_dest]; // 新しいノードを作成（コピー）
+        cur.l = copy_range_rec(nodes[idx_dest].l, nodes[idx_src].l, l, m, a, b);
+        cur.r = copy_range_rec(nodes[idx_dest].r, nodes[idx_src].r, m, r, a, b);
+        
+        cur.val = f(nodes[cur.l].val, nodes[cur.r].val);
+        nodes.push_back(cur);
+        return nodes.size() - 1;
     }
 };
 /*
