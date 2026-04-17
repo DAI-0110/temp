@@ -1,0 +1,199 @@
+template<typename T, typename L, typename Op, typename Mapping, typename Composition>
+struct PersistentLazySegmentTree {
+    struct Node {
+        T val;
+        L lazy;
+        int l, r; 
+    };
+
+    int n;
+    int original_size; // 元の配列サイズを保持
+    std::vector<Node> nodes;
+    T e;
+    L id;
+    Op op;
+    Mapping mapping;
+    Composition composition;
+
+    PersistentLazySegmentTree(int _n, Op _op, Mapping _mapping, Composition _comp, T _e, L _id) 
+        : original_size(_n), op(_op), mapping(_mapping), composition(_comp), e(_e), id(_id) {
+        n = 1;
+        while (n < _n) n <<= 1;
+        // 初期構築 n*2 + 更新分
+        nodes.reserve(n * 2 + 400000 * (__builtin_ctz(n) + 2)); 
+    }
+
+    // 元の単位元のみで構築
+    int build() {
+        return build_rec(0, n);
+    }
+
+    // 【追加】初期配列から構築 O(N)
+    int build(const std::vector<T>& v) {
+        return build_rec(0, n, v);
+    }
+
+    int set(int root, int k, T x) {
+        return set_rec(root, 0, n, k, x, id);
+    }
+
+    int apply(int root, int a, int b, L lazy_val) {
+        return apply_rec(root, 0, n, a, b, lazy_val, id);
+    }
+
+    T query(int root, int a, int b) {
+        return query_rec(root, 0, n, a, b, id);
+    }
+
+    T get(int root, int k) {
+        return query(root, k, k + 1);
+    }
+
+    int copy_range(int root_dest, int root_src, int a, int b) {
+        return copy_range_rec(root_dest, root_src, 0, n, a, b, id, id);
+    }
+
+private:
+    // 単位元での構築用
+    int build_rec(int l, int r) {
+        if (l + 1 == r) {
+            nodes.push_back({e, id, -1, -1});
+            return nodes.size() - 1;
+        }
+        int m = (l + r) / 2;
+        int l_ch = build_rec(l, m);
+        int r_ch = build_rec(m, r);
+        nodes.push_back({op(nodes[l_ch].val, nodes[r_ch].val), id, l_ch, r_ch});
+        return nodes.size() - 1;
+    }
+
+    // 【追加】初期配列での構築用
+    int build_rec(int l, int r, const std::vector<T>& v) {
+        if (l + 1 == r) {
+            // 配列の範囲内なら値を入れ、範囲外(2のべき乗へのパディング)なら単位元を入れる
+            T val = (l < (int)v.size() ? v[l] : e);
+            nodes.push_back({val, id, -1, -1});
+            return nodes.size() - 1;
+        }
+        int m = (l + r) / 2;
+        int l_ch = build_rec(l, m, v);
+        int r_ch = build_rec(m, r, v);
+        nodes.push_back({op(nodes[l_ch].val, nodes[r_ch].val), id, l_ch, r_ch});
+        return nodes.size() - 1;
+    }
+
+    int apply_node(int idx, L lazy_val) {
+        if (lazy_val == id) return idx;
+        Node cur = nodes[idx];
+        cur.val = mapping(lazy_val, cur.val);
+        cur.lazy = composition(lazy_val, cur.lazy);
+        nodes.push_back(cur);
+        return nodes.size() - 1;
+    }
+
+    int set_rec(int idx, int l, int r, int k, T x, L acc_lazy) {
+        if (l + 1 == r) {
+            nodes.push_back({x, id, -1, -1});
+            return nodes.size() - 1;
+        }
+        L cur_lazy = composition(acc_lazy, nodes[idx].lazy);
+        int m = (l + r) / 2;
+        Node cur;
+        if (k < m) {
+            cur.l = set_rec(nodes[idx].l, l, m, k, x, cur_lazy);
+            cur.r = apply_node(nodes[idx].r, cur_lazy);
+        } else {
+            cur.l = apply_node(nodes[idx].l, cur_lazy);
+            cur.r = set_rec(nodes[idx].r, m, r, k, x, cur_lazy);
+        }
+        cur.lazy = id;
+        cur.val = op(nodes[cur.l].val, nodes[cur.r].val);
+        nodes.push_back(cur);
+        return nodes.size() - 1;
+    }
+
+    int apply_rec(int idx, int l, int r, int a, int b, L update_lazy, L acc_lazy) {
+        if (b <= l || r <= a) return apply_node(idx, acc_lazy);
+        if (a <= l && r <= b) return apply_node(idx, composition(update_lazy, acc_lazy));
+        
+        L cur_lazy = composition(acc_lazy, nodes[idx].lazy);
+        int m = (l + r) / 2;
+        Node cur;
+        cur.l = apply_rec(nodes[idx].l, l, m, a, b, update_lazy, cur_lazy);
+        cur.r = apply_rec(nodes[idx].r, m, r, a, b, update_lazy, cur_lazy);
+        cur.lazy = id;
+        cur.val = op(nodes[cur.l].val, nodes[cur.r].val);
+        nodes.push_back(cur);
+        return nodes.size() - 1;
+    }
+
+    T query_rec(int idx, int l, int r, int a, int b, L acc_lazy) {
+        if (b <= l || r <= a) return e;
+        L cur_lazy = composition(acc_lazy, nodes[idx].lazy);
+        if (a <= l && r <= b) return mapping(cur_lazy, nodes[idx].val);
+        int m = (l + r) / 2;
+        return op(query_rec(nodes[idx].l, l, m, a, b, cur_lazy),
+                  query_rec(nodes[idx].r, m, r, a, b, cur_lazy));
+    }
+
+    int copy_range_rec(int idx_dest, int idx_src, int l, int r, int a, int b, L dest_lazy, L src_lazy) {
+        if (b <= l || r <= a) return apply_node(idx_dest, dest_lazy);
+        if (a <= l && r <= b) return apply_node(idx_src, src_lazy);
+
+        L cur_dest_lazy = composition(dest_lazy, nodes[idx_dest].lazy);
+        L cur_src_lazy = composition(src_lazy, nodes[idx_src].lazy);
+
+        int m = (l + r) / 2;
+        Node cur;
+        cur.l = copy_range_rec(nodes[idx_dest].l, nodes[idx_src].l, l, m, a, b, cur_dest_lazy, cur_src_lazy);
+        cur.r = copy_range_rec(nodes[idx_dest].r, nodes[idx_src].r, m, r, a, b, cur_dest_lazy, cur_src_lazy);
+        cur.lazy = id;
+        cur.val = op(nodes[cur.l].val, nodes[cur.r].val);
+        nodes.push_back(cur);
+        return nodes.size() - 1;
+    }
+};
+// 1. 型と定数の定義
+using T = long long;
+using L = long long;
+const long long INF = 1e18; // 単位元（最小値なので無限大）
+const long long ID_L = 0;   // 遅延タグの単位元（加算なので0）
+
+// 2. 演算関数の定義
+// ① 区間取得の演算 (最小値)
+T op(T a, T b) {
+    return std::min(a, b);
+}
+
+// ② 遅延タグの適用 (加算)
+// ※ダミーノード(INF)には加算しないよう保護
+T mapping(L f, T x) {
+    if (x >= INF / 2) return x; 
+    return x + f;
+}
+
+// ③ 遅延タグの合成 (加算の累積)
+// f が新しく降ってくるタグ、g が既に溜まっているタグ
+L composition(L f, L g) {
+    return f + g;
+}
+
+template<typename T, typename L, typename Op, typename Mapping, typename Composition>
+auto make_persistent_lazy_segtree(int n, Op op, Mapping mapping, Composition comp, T e, L id) {
+    return PersistentLazySegmentTree<T, L, Op, Mapping, Composition>(n, op, mapping, comp, e, id);
+}
+/*
+PersistentLazySegmentTree<T, L, decltype(&op), decltype(&mapping), decltype(&composition)> 
+        seg(N, op, mapping, composition, INF, ID_L);
+
+vector<int> roots;
+roots.push_back(seg.build(A));
+
+区間操作
+int root_v1 = seg.apply(roots[0], 1, 4, 5);
+roots.push_back(root_v1);
+
+一点更新
+int root_v2 = seg.set(roots[1], 2, 100);
+roots.push_back(root_v2);
+*/
