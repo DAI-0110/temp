@@ -154,28 +154,33 @@ private:
     }
 };
 // 1. 型と定数の定義
-using T = long long;
-using L = long long;
-const long long INF = 1e18; // 単位元（最小値なので無限大）
-const long long ID_L = 0;   // 遅延タグの単位元（加算なので0）
+struct T {
+    ll x,len;
+};
+struct L {
+    ll a, b;
+};
+
+T e = {0,0};
+L id = {1,0};
 
 // 2. 演算関数の定義
 // ① 区間取得の演算 (最小値)
 T op(T a, T b) {
-    return std::min(a, b);
+    return {(a.x + b.x) % MOD, a.len + b.len};
 }
 
 // ② 遅延タグの適用 (加算)
-// ※ダミーノード(INF)には加算しないよう保護
+// ※ダミーノードには加算しないよう保護
 T mapping(L f, T x) {
-    if (x >= INF / 2) return x; 
-    return x + f;
+    if (x.len == 0) return x; 
+    return {( x.x * f.a % MOD + f.b * x.len % MOD) % MOD, x.len};
 }
 
 // ③ 遅延タグの合成 (加算の累積)
 // f が新しく降ってくるタグ、g が既に溜まっているタグ
 L composition(L f, L g) {
-    return f + g;
+    return { g.a * f.a % MOD, (f.a*g.b % MOD + f.b) % MOD};
 }
 
 template<typename T, typename L, typename Op, typename Mapping, typename Composition>
