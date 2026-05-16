@@ -1,0 +1,44 @@
+template<typename T>
+struct Matrix {
+    int H, W;
+    vector<vector<T>> val;
+
+    Matrix(int h, int w) : H(h), W(w), val( h, vector<T>(w)) {}
+
+    inline vector<T>& operator[] (int i) {
+        return val[i];
+    }
+    inline const vector<T>& operator[] (int i) const {
+        return val[i];
+    }
+
+    Matrix operator* (const Matrix& B) const {
+        Matrix C( H, B.W);
+
+        for(int i = 0;i < H;i++) {
+            for(int k = 0;k < W;k++) {
+                for(int j = 0;j < B.W;j++) {
+                    C[i][j] += val[i][k] * B[k][j];
+                }
+            }
+        }
+
+        return C;
+    }
+
+    Matrix pow(long long n) const {
+        Matrix res( H, W);
+        for(int i = 0;i < H;i++) res[i][i] = 1;
+
+        Matrix base = *this;
+        while(n > 0) {
+            if(n & 1) {
+                res = res * base;
+            }
+            base = base * base;
+            n >>= 1;
+        }
+
+        return res;
+    }
+};
